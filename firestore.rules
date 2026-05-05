@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // config/vagas: leitura pública (para o contador em tempo real), escrita apenas via Admin SDK
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // inscricoes: criação permitida para usuários autenticados anonimamente
+    // leitura e edição apenas via Admin SDK (nas API Routes do servidor)
+    match /inscricoes/{inscricaoId} {
+      allow read: if false;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+  }
+}
