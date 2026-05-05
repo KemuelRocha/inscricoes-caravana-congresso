@@ -16,6 +16,15 @@ interface InscricaoDoc {
   criadoEm: string | null
 }
 
+class AdminRouteError extends Error {
+  constructor(
+    message: string,
+    public status: number
+  ) {
+    super(message)
+  }
+}
+
 function verificarSenha(request: NextRequest): boolean {
   const authHeader = request.headers.get('Authorization')
   if (!authHeader || !authHeader.startsWith('Bearer ')) return false
@@ -132,63 +141,56 @@ export async function DELETE(request: NextRequest) {
     }
 
     const inscricaoRef = adminDb.collection('inscricoes').doc(id)
-    const inscricaoDoc = await inscricaoRef.get()
-
-    if (!inscricaoDoc.exists) {
-      return NextResponse.json({ error: 'Inscrição não encontrada' }, { status: 404 })
-    }
-
-    const inscricao = inscricaoDoc.data()!
-    const { status, sexo } = inscricao
-
-    let proximoRef: FirebaseFirestore.DocumentReference | null = null
-    let proximoNome: string | null = null
-
-    if (status === 'confirmado') {
-      const esperaSnap = await adminDb
-        .collection('inscricoes')
-        .where('sexo', '==', sexo)
-        .where('status', '==', 'espera')
-        .get()
-
-      if (!esperaSnap.empty) {
-        const proximo = esperaSnap.docs.reduce((menor, doc) =>
-          (doc.data().posicaoEspera ?? Infinity) < (menor.data().posicaoEspera ?? Infinity)
-            ? doc
-            : menor
-        )
-        proximoRef = proximo.ref
-        proximoNome = proximo.data().nomeCompleto
-      }
-    }
-
     const vagasRef = adminDb.collection('config').doc('vagas')
 
-    await adminDb.runTransaction(async (transaction) => {
+    const result = await adminDb.runTransaction(async (transaction) => {
       const [inscricaoSnap, vagasSnap] = await Promise.all([
         transaction.get(inscricaoRef),
         transaction.get(vagasRef),
       ])
 
-      let proximoSnap = null
-      if (proximoRef) {
-        proximoSnap = await transaction.get(proximoRef)
+      if (!inscricaoSnap.exists) {
+        throw new AdminRouteError('Inscrição não encontrada', 404)
       }
 
-      const vagas = vagasSnap.data() ?? {
+      const inscricao = inscricaoSnap.data()!
+      const statusAtual = inscricao.status
+      const sexo = inscricao.sexo
+
+      if (statusAtual === 'cancelado') {
+        return { promovido: null }
+      }
+
+      let proximo: FirebaseFirestore.QueryDocumentSnapshot | null = null
+      if (statusAtual === 'confirmado') {
+        const esperaSnap = await transaction.get(
+          adminDb
+            .collection('inscricoes')
+            .where('sexo', '==', sexo)
+            .where('status', '==', 'espera')
+        )
+
+        if (!esperaSnap.empty) {
+          proximo = esperaSnap.docs.reduce((menor, doc) =>
+            (doc.data().posicaoEspera ?? Infinity) < (menor.data().posicaoEspera ?? Infinity)
+              ? doc
+              : menor
+          )
+        }
+      }
+
+      const vagas = (vagasSnap.data() ?? {
         masculinoConfirmados: 0,
         femininoConfirmados: 0,
         masculinoEspera: 0,
         femininoEspera: 0,
-      }
-
-      const statusAtual = inscricaoSnap.data()?.status
+      }) as Record<string, number>
 
       transaction.update(inscricaoRef, { status: 'cancelado' })
 
       if (statusAtual === 'confirmado') {
-        if (proximoSnap && proximoSnap.exists) {
-          transaction.update(proximoRef!, { status: 'confirmado', posicaoEspera: null })
+        if (proximo) {
+          transaction.update(proximo.ref, { status: 'confirmado', posicaoEspera: null })
           const campoEspera = sexo === 'Masculino' ? 'masculinoEspera' : 'femininoEspera'
           transaction.update(vagasRef, {
             [campoEspera]: Math.max(0, (vagas[campoEspera] ?? 0) - 1),
@@ -205,13 +207,21 @@ export async function DELETE(request: NextRequest) {
           [campoEspera]: Math.max(0, (vagas[campoEspera] ?? 0) - 1),
         })
       }
+
+      return {
+        promovido: proximo ? { nome: proximo.data().nomeCompleto } : null,
+      }
     })
 
     return NextResponse.json({
       success: true,
-      promovido: proximoRef ? { nome: proximoNome } : null,
+      promovido: result.promovido,
     })
   } catch (error) {
+    if (error instanceof AdminRouteError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Erro no admin DELETE:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   DadosFormulario,
@@ -51,6 +51,24 @@ const inputClass =
 const inputErroClass =
   'w-full bg-red-500/5 border border-red-500/40 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-red-400 transition-all duration-200'
 
+const IDEMPOTENCY_STORAGE_KEY = 'inscricao:idempotency-key'
+
+function criarIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function obterIdempotencyKey(): string {
+  const existente = sessionStorage.getItem(IDEMPOTENCY_STORAGE_KEY)
+  if (existente) return existente
+
+  const nova = criarIdempotencyKey()
+  sessionStorage.setItem(IDEMPOTENCY_STORAGE_KEY, nova)
+  return nova
+}
+
 export function FormularioInscricao() {
   const router = useRouter()
   const [dados, setDados] = useState<DadosFormulario>(dadosIniciais)
@@ -59,6 +77,7 @@ export function FormularioInscricao() {
   const [menorDeIdade, setMenorDeIdade] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [erroGlobal, setErroGlobal] = useState('')
+  const submitBloqueadoRef = useRef(false)
 
   const anoAtual = new Date().getFullYear()
 
@@ -79,6 +98,9 @@ export function FormularioInscricao() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target
+    if (!submitBloqueadoRef.current) {
+      sessionStorage.removeItem(IDEMPOTENCY_STORAGE_KEY)
+    }
 
     if (name === 'whatsapp') {
       const formatado = formatarWhatsapp(value)
@@ -101,6 +123,8 @@ export function FormularioInscricao() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitBloqueadoRef.current) return
+    submitBloqueadoRef.current = true
 
     const novosErros = validarFormulario(dados)
     if (Object.keys(novosErros).length > 0) {
@@ -108,6 +132,7 @@ export function FormularioInscricao() {
       const primeiroCampo = Object.keys(novosErros)[0]
       const el = document.querySelector(`[name="${primeiroCampo}"]`) as HTMLElement
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      submitBloqueadoRef.current = false
       return
     }
 
@@ -115,9 +140,13 @@ export function FormularioInscricao() {
     setErroGlobal('')
 
     try {
+      const idempotencyKey = obterIdempotencyKey()
       const res = await fetch('/api/inscricao', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+        },
         body: JSON.stringify(dados),
       })
 
@@ -126,6 +155,7 @@ export function FormularioInscricao() {
       if (!res.ok) {
         setErroGlobal(json.error ?? 'Erro ao processar inscrição')
         setEnviando(false)
+        submitBloqueadoRef.current = false
         return
       }
 
@@ -137,10 +167,12 @@ export function FormularioInscricao() {
         ...(json.posicaoEspera ? { posicao: String(json.posicaoEspera) } : {}),
       })
 
+      sessionStorage.removeItem(IDEMPOTENCY_STORAGE_KEY)
       router.push(`/confirmacao?${params.toString()}`)
     } catch {
       setErroGlobal('Erro de conexão. Verifique sua internet e tente novamente.')
       setEnviando(false)
+      submitBloqueadoRef.current = false
     }
   }
 

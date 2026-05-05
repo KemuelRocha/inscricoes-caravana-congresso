@@ -2,12 +2,46 @@ import { NextRequest, NextResponse } from 'next/server'
 import { adminDb } from '@/lib/firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { calcularIdade, validarMaioridade, validarWhatsapp } from '@/lib/validacoes'
+import { createHash } from 'crypto'
 
 const LIMITE_MASCULINO = 25
 const LIMITE_FEMININO = 25
+const IDEMPOTENCY_KEY_REGEX = /^[A-Za-z0-9._:-]{8,128}$/
+
+interface PayloadInscricao {
+  area: string
+  congregacao: string
+  nomeCompleto: string
+  whatsapp: string
+  cartaoMembro: string
+  sexo: 'Masculino' | 'Feminino'
+  dataNascimento: string
+}
+
+interface RespostaInscricao {
+  id: string
+  status: 'confirmado' | 'espera'
+  posicaoEspera: number | null
+  nome: string
+  sexo: 'Masculino' | 'Feminino'
+}
+
+function hashPayload(payload: PayloadInscricao): string {
+  return createHash('sha256')
+    .update(JSON.stringify(payload))
+    .digest('hex')
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const idempotencyKey = request.headers.get('Idempotency-Key')?.trim()
+    if (!idempotencyKey || !IDEMPOTENCY_KEY_REGEX.test(idempotencyKey)) {
+      return NextResponse.json(
+        { error: 'Idempotency-Key inválida ou ausente' },
+        { status: 400 }
+      )
+    }
+
     const body = await request.json()
     const { area, congregacao, nomeCompleto, whatsapp, cartaoMembro, sexo, dataNascimento } = body
 
@@ -37,11 +71,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const payload: PayloadInscricao = {
+      area: String(area).trim(),
+      congregacao: String(congregacao).trim(),
+      nomeCompleto: String(nomeCompleto).trim(),
+      whatsapp: String(whatsapp).trim(),
+      cartaoMembro: String(cartaoMembro).trim(),
+      sexo,
+      dataNascimento: String(dataNascimento).trim(),
+    }
+
     const idade = calcularIdade(dataNascimento)
     const vagasRef = adminDb.collection('config').doc('vagas')
+    const idempotencyRef = adminDb.collection('idempotencyKeys').doc(idempotencyKey)
+    const payloadHash = hashPayload(payload)
 
     const result = await adminDb.runTransaction(async (transaction) => {
-      const vagasDoc = await transaction.get(vagasRef)
+      const [idempotencyDoc, vagasDoc] = await Promise.all([
+        transaction.get(idempotencyRef),
+        transaction.get(vagasRef),
+      ])
+
+      if (idempotencyDoc.exists) {
+        const idempotencyData = idempotencyDoc.data()
+        if (idempotencyData?.payloadHash !== payloadHash) {
+          return { conflito: true as const }
+        }
+
+        return {
+          conflito: false as const,
+          response: idempotencyData.response as RespostaInscricao,
+        }
+      }
 
       const vagas = vagasDoc.exists
         ? (vagasDoc.data() as {
@@ -81,27 +142,47 @@ export async function POST(request: NextRequest) {
       }
 
       const inscricaoRef = adminDb.collection('inscricoes').doc()
+      const response: RespostaInscricao = {
+        id: inscricaoRef.id,
+        status,
+        posicaoEspera,
+        nome: payload.nomeCompleto,
+        sexo,
+      }
 
       transaction.set(inscricaoRef, {
-        area: area.trim(),
-        congregacao: congregacao.trim(),
-        nomeCompleto: nomeCompleto.trim(),
-        whatsapp: whatsapp.trim(),
-        cartaoMembro: cartaoMembro.trim(),
+        area: payload.area,
+        congregacao: payload.congregacao,
+        nomeCompleto: payload.nomeCompleto,
+        whatsapp: payload.whatsapp,
+        cartaoMembro: payload.cartaoMembro,
         sexo,
         idade,
-        dataNascimento,
+        dataNascimento: payload.dataNascimento,
         status,
         posicaoEspera,
         criadoEm: FieldValue.serverTimestamp(),
       })
 
       transaction.set(vagasRef, vagas, { merge: true })
+      transaction.create(idempotencyRef, {
+        payloadHash,
+        response,
+        inscricaoId: inscricaoRef.id,
+        criadoEm: FieldValue.serverTimestamp(),
+      })
 
-      return { id: inscricaoRef.id, status, posicaoEspera, nome: nomeCompleto.trim(), sexo }
+      return { conflito: false as const, response }
     })
 
-    return NextResponse.json(result)
+    if (result.conflito) {
+      return NextResponse.json(
+        { error: 'Esta chave de idempotência já foi usada com outros dados' },
+        { status: 409 }
+      )
+    }
+
+    return NextResponse.json(result.response)
   } catch (error) {
     console.error('Erro na inscrição:', error)
     return NextResponse.json(

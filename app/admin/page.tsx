@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { StatusBadge } from '@/components/StatusBadge'
 
 interface Inscricao {
@@ -40,8 +40,17 @@ export default function AdminPage() {
   const [tabAtiva, setTabAtiva] = useState<Tab>('masculino')
   const [cancelando, setCancelando] = useState<string | null>(null)
   const [mensagem, setMensagem] = useState('')
+  const [logando, setLogando] = useState(false)
+  const [exportando, setExportando] = useState(false)
+
+  const loginBloqueadoRef = useRef(false)
+  const buscaBloqueadaRef = useRef(false)
+  const cancelamentoBloqueadoRef = useRef(false)
+  const exportacaoBloqueadaRef = useRef(false)
 
   const buscarDados = useCallback(async (senhaAtual: string) => {
+    if (buscaBloqueadaRef.current) return
+    buscaBloqueadaRef.current = true
     setCarregando(true)
     setErro('')
     try {
@@ -62,6 +71,9 @@ export default function AdminPage() {
       setErro('Erro ao carregar dados')
     } finally {
       setCarregando(false)
+      setLogando(false)
+      buscaBloqueadaRef.current = false
+      loginBloqueadoRef.current = false
     }
   }, [])
 
@@ -73,17 +85,22 @@ export default function AdminPage() {
 
   function handleLogin(e: React.FormEvent) {
     e.preventDefault()
+    if (loginBloqueadoRef.current) return
     if (!senhaInput.trim()) {
       setErroSenha('Digite a senha')
       return
     }
+    loginBloqueadoRef.current = true
+    setLogando(true)
     setSenha(senhaInput)
     setAutenticado(true)
     setErroSenha('')
   }
 
   async function handleCancelar(id: string, nome: string) {
+    if (cancelamentoBloqueadoRef.current) return
     if (!confirm(`Cancelar inscrição de ${nome}?`)) return
+    cancelamentoBloqueadoRef.current = true
     setCancelando(id)
     setMensagem('')
     try {
@@ -109,24 +126,38 @@ export default function AdminPage() {
       setMensagem('Erro ao cancelar inscrição')
     } finally {
       setCancelando(null)
+      cancelamentoBloqueadoRef.current = false
     }
   }
 
-  function handleExportarCSV() {
+  async function handleExportarCSV() {
+    if (exportacaoBloqueadaRef.current) return
+    exportacaoBloqueadaRef.current = true
+    setExportando(true)
+    setMensagem('')
     const url = `/api/admin?export=csv`
     const link = document.createElement('a')
     link.href = url
     link.download = 'inscricoes.csv'
 
-    // Fetch com header de auth e criar blob
-    fetch(url, { headers: { Authorization: `Bearer ${senha}` } })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const blobUrl = URL.createObjectURL(blob)
-        link.href = blobUrl
-        link.click()
-        URL.revokeObjectURL(blobUrl)
-      })
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${senha}` } })
+      if (!res.ok) {
+        setMensagem('Erro ao exportar CSV')
+        return
+      }
+
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      link.href = blobUrl
+      link.click()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      setMensagem('Erro ao exportar CSV')
+    } finally {
+      setExportando(false)
+      exportacaoBloqueadaRef.current = false
+    }
   }
 
   if (!autenticado) {
@@ -157,9 +188,10 @@ export default function AdminPage() {
             {erroSenha && <p className="text-red-400 text-sm">{erroSenha}</p>}
             <button
               type="submit"
-              className="w-full py-3 rounded-xl font-bold bg-dourado-500 text-roxo-950 hover:bg-dourado-400 transition-colors"
+              disabled={logando}
+              className="w-full py-3 rounded-xl font-bold bg-dourado-500 text-roxo-950 hover:bg-dourado-400 transition-colors disabled:opacity-50 disabled:cursor-wait"
             >
-              Entrar
+              {logando ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
         </div>
@@ -193,9 +225,10 @@ export default function AdminPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleExportarCSV}
-              className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:bg-emerald-600/30 transition-colors"
+              disabled={exportando}
+              className="px-4 py-2 rounded-xl text-sm font-bold bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 hover:bg-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
             >
-              📥 Exportar CSV
+              {exportando ? '⏳ Exportando...' : '📥 Exportar CSV'}
             </button>
             <button
               onClick={() => buscarDados(senha)}
@@ -328,7 +361,7 @@ export default function AdminPage() {
                       <td className="px-4 py-3">
                         <button
                           onClick={() => handleCancelar(i.id, i.nomeCompleto)}
-                          disabled={cancelando === i.id}
+                          disabled={cancelando !== null}
                           className="px-3 py-1 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-40"
                         >
                           {cancelando === i.id ? '...' : 'Cancelar'}
@@ -397,7 +430,7 @@ function TabelaEspera({
                   <td className="px-4 py-3">
                     <button
                       onClick={() => onCancelar(i.id, i.nomeCompleto)}
-                      disabled={cancelando === i.id}
+                      disabled={cancelando !== null}
                       className="px-3 py-1 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-40"
                     >
                       {cancelando === i.id ? '...' : 'Cancelar'}
