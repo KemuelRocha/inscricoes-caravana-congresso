@@ -50,7 +50,7 @@ export default async function ConfirmacaoPage({ searchParams }: { searchParams: 
                 : 'bg-dourado-500/20 border-2 border-dourado-500/40 animate-pulse-glow'
               }`}
           >
-            {confirmado ? '🎉' : '⏳'}
+            {confirmado ? '📋' : '⏳'}
           </div>
         </div>
 
@@ -70,8 +70,8 @@ export default async function ConfirmacaoPage({ searchParams }: { searchParams: 
         >
           {confirmado ? (
             <>
-              Vaga{' '}
-              <span className="text-gradient-gold">Garantida!</span>
+              Inscrição{' '}
+              <span className="text-gradient-gold">Recebida!</span>
             </>
           ) : (
             <>
@@ -87,8 +87,8 @@ export default async function ConfirmacaoPage({ searchParams }: { searchParams: 
           style={{ animationDelay: '0.2s' }}
         >
           {confirmado
-            ? `${nome}, sua inscrição foi confirmada com sucesso! Aguarde as instruções pelo WhatsApp.`
-            : `${nome}, você está na lista de espera${posicao ? ` na posição ${posicao}` : ''}. Você será notificado caso uma vaga abrirte.`}
+            ? `${nome}, sua inscrição foi registrada e será avaliada pela equipe. Aguarde a divulgação da lista nos grupos da UMADEPE.`
+            : `${nome}, sua inscrição está na lista de espera${posicao ? ` (posição ${posicao})` : ''}. A supervisão divulgará a lista final nos grupos da UMADEPE e entrará em contato individualmente caso haja substituição.`}
         </p>
 
         {/* Card de resumo */}
@@ -102,7 +102,7 @@ export default async function ConfirmacaoPage({ searchParams }: { searchParams: 
           <div className="flex flex-col gap-3">
             <InfoRow label="Nome" value={nome} />
             {sexo && <InfoRow label="Sexo" value={sexo} />}
-            <InfoRow label="Status" value={confirmado ? '✅ Confirmado' : `⏳ Espera ${posicao ? `#${posicao}` : ''}`} />
+            <InfoRow label="Status" value={confirmado ? '✅ Registrada' : `⏳ Espera ${posicao ? `#${posicao}` : ''}`} />
             <InfoRow label="Evento" value={`Congresso de Jovens — Recife ${anoAtual}`} />
             <InfoRow label="Datas" value="3, 4 e 5 de julho" />
             <div className="pt-3 border-t border-white/10">
@@ -118,7 +118,7 @@ export default async function ConfirmacaoPage({ searchParams }: { searchParams: 
             style={{ animationDelay: '0.4s' }}
           >
             <p className="text-white/70 text-sm text-center">
-              📱 Fique atento ao seu WhatsApp. Em breve você receberá informações sobre a concentração, horários e valores.
+              📋 A lista será validada pela equipe e divulgada nos grupos da UMADEPE. Fique atento às comunicações da supervisão.
             </p>
           </div>
         ) : (
@@ -127,7 +127,7 @@ export default async function ConfirmacaoPage({ searchParams }: { searchParams: 
             style={{ animationDelay: '0.4s' }}
           >
             <p className="text-white/70 text-sm text-center">
-              📱 Se uma vaga abrir, você será avisado pelo WhatsApp. Mantenha seu número atualizado.
+              📋 A supervisão divulgará a lista final nos grupos da UMADEPE e entrará em contato individualmente para eventuais substituições.
             </p>
           </div>
         )}

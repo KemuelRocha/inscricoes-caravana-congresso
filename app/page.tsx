@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ContadorVagasClient } from '@/components/ContadorVagasClient'
+import { ContadorSimplesClient } from '@/components/ContadorSimplesClient'
 
 export default function HomePage() {
   const anoAtual = new Date().getFullYear()
@@ -87,7 +87,7 @@ export default function HomePage() {
           {[
             { icon: '📅', label: '3 a 5 de Julho' },
             { icon: '📍', label: 'Recife, PE' },
-            { icon: '🎯', label: '50 vagas' },
+            { icon: '🎯', label: '50 participantes' },
           ].map((item) => (
             <div
               key={item.label}
@@ -101,21 +101,10 @@ export default function HomePage() {
           ))}
         </div>
 
-        {/* ---- CONTADOR DE VAGAS ---- */}
-        <div
-          className="w-full mb-10 animate-slide-up"
-          style={{ animationDelay: '0.4s' }}
-        >
-          <h2 className="font-display font-black text-xl text-white mb-6">
-            <span className="text-gradient-gold">VAGAS DISPONÍVEIS</span>
-          </h2>
-          <ContadorVagasClient />
-        </div>
-
         {/* CTA */}
         <div
           className="flex flex-col sm:flex-row gap-4 w-full max-w-sm animate-slide-up"
-          style={{ animationDelay: '0.5s' }}
+          style={{ animationDelay: '0.4s' }}
         >
           <Link
             href="/inscricao"
@@ -129,9 +118,17 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <p className="text-white/30 text-xs mt-4 animate-slide-up" style={{ animationDelay: '0.6s' }}>
-          Vagas limitadas · Menores de 18 anos não podem participar
+        <p className="text-white/30 text-xs mt-4 animate-slide-up" style={{ animationDelay: '0.5s' }}>
+          Vagas limitadas · Mesmo com vagas esgotadas, você pode entrar na lista de espera
         </p>
+        <p className="text-white/20 text-xs mt-1 animate-slide-up" style={{ animationDelay: '0.5s' }}>
+          Menores de 18 anos não podem participar
+        </p>
+
+        {/* Contador discreto */}
+        <div className="animate-slide-up" style={{ animationDelay: '0.6s' }}>
+          <ContadorSimplesClient />
+        </div>
       </section>
 
       {/* Rodapé */}

@@ -357,7 +357,7 @@ export function FormularioInscricao() {
         ) : menorDeIdade ? (
           'Inscrição não disponível'
         ) : (
-          'GARANTIR MINHA VAGA 🔥'
+          'ENVIAR INSCRIÇÃO 🔥'
         )}
       </button>
 
