@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { ContadorSimplesClient } from '@/components/ContadorSimplesClient'
 
 export default function HomePage() {
   const anoAtual = new Date().getFullYear()
@@ -125,10 +124,6 @@ export default function HomePage() {
           Menores de 18 anos não podem participar
         </p>
 
-        {/* Contador discreto */}
-        <div className="animate-slide-up" style={{ animationDelay: '0.6s' }}>
-          <ContadorSimplesClient />
-        </div>
       </section>
 
       {/* Rodapé */}
