@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { ContadorSimplesClient } from '@/components/ContadorSimplesClient'
 import { FormularioInscricaoClient } from '@/components/FormularioInscricaoClient'
 
 export const metadata = {
@@ -52,11 +51,6 @@ export default function InscricaoPage() {
           <p className="text-white/50 text-sm">
             3, 4 e 5 de julho · Preencha todos os campos com atenção
           </p>
-        </div>
-
-        {/* Contador */}
-        <div className="text-center mb-8">
-          <ContadorSimplesClient />
         </div>
 
         {/* Formulário */}
