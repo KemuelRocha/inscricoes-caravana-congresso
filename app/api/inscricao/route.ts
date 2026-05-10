@@ -86,10 +86,16 @@ export async function POST(request: NextRequest) {
     const idempotencyRef = adminDb.collection('idempotencyKeys').doc(idempotencyKey)
     const payloadHash = hashPayload(payload)
 
+    const unicidadeKey = createHash('sha256')
+      .update(`${payload.nomeCompleto.toLowerCase()}:${payload.cartaoMembro.toLowerCase()}`)
+      .digest('hex')
+    const unicidadeRef = adminDb.collection('inscricoesUnicas').doc(unicidadeKey)
+
     const result = await adminDb.runTransaction(async (transaction) => {
-      const [idempotencyDoc, vagasDoc] = await Promise.all([
+      const [idempotencyDoc, vagasDoc, unicidadeDoc] = await Promise.all([
         transaction.get(idempotencyRef),
         transaction.get(vagasRef),
+        transaction.get(unicidadeRef),
       ])
 
       if (idempotencyDoc.exists) {
@@ -102,6 +108,10 @@ export async function POST(request: NextRequest) {
           conflito: false as const,
           response: idempotencyData.response as RespostaInscricao,
         }
+      }
+
+      if (unicidadeDoc.exists) {
+        return { duplicado: true as const }
       }
 
       const vagas = vagasDoc.exists
@@ -171,13 +181,24 @@ export async function POST(request: NextRequest) {
         inscricaoId: inscricaoRef.id,
         criadoEm: FieldValue.serverTimestamp(),
       })
+      transaction.create(unicidadeRef, {
+        inscricaoId: inscricaoRef.id,
+        criadoEm: FieldValue.serverTimestamp(),
+      })
 
-      return { conflito: false as const, response }
+      return { conflito: false as const, duplicado: false as const, response }
     })
 
     if (result.conflito) {
       return NextResponse.json(
         { error: 'Esta chave de idempotência já foi usada com outros dados' },
+        { status: 409 }
+      )
+    }
+
+    if (result.duplicado) {
+      return NextResponse.json(
+        { error: 'Já existe uma inscrição com este nome e cartão de membro.' },
         { status: 409 }
       )
     }
