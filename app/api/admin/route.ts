@@ -86,7 +86,6 @@ export async function GET(request: NextRequest) {
         'Cartão Membro',
         'Área',
         'Congregação',
-        'Criado Em',
       ]
 
       const linhas = inscricoes.map((i) => {
@@ -102,7 +101,6 @@ export async function GET(request: NextRequest) {
           i.cartaoMembro,
           i.area,
           i.congregacao,
-          i.criadoEm ?? '',
         ]
         return campos.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')
       })
